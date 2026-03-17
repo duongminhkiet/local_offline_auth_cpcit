@@ -1,3 +1,5 @@
+## 1.0.1
+* Update code in example/main
 ## 1.0.0
 * Initial release.
 * Support for Biometric authentication (FaceID/Fingerprint).

@@ -1,6 +1,6 @@
 name: local_offline_auth_cpcit
 description: "A secure Flutter plugin for offline authentication using Biometrics (Fingerprint/FaceID) and encrypted PIN with AES-GCM 256-bit."
-version: 1.0.0
+version: 1.0.1
 repository: https://github.com/duongminhkiet/local_offline_auth_cpcit
 homepage:
 

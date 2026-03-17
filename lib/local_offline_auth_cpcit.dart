@@ -1,4 +1,4 @@
-library local_offline_auth_cpcit;
+// library local_offline_auth_cpcit;
 
 // Xuất file service ra để người dùng có thể import và sử dụng
 export 'src/offline_auth_service.dart';

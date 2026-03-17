@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Lớp tiện ích tĩnh, độc lập để quản lý toàn bộ quy trình xác thực offline.
 const int kDefaultPinLength = 6;
+
 class OfflineAuthService {
   // Ngăn việc tạo instance của lớp tiện ích này.
   OfflineAuthService._();
@@ -29,28 +30,37 @@ class OfflineAuthService {
   static final _localAuth = LocalAuthentication();
 
   // --- PRIVATE HELPERS & CONFIG ---
-  static String _normalizeUsername(String username) => username.trim().toLowerCase();
+  static String _normalizeUsername(String username) =>
+      username.trim().toLowerCase();
 
-  static String _getPinSaltKey(String username) => 'offline_pin_salt_${_normalizeUsername(username)}';
-  static String _getPinHashKey(String username) => 'offline_pin_hash_${_normalizeUsername(username)}';
-  static String _getBiometricPinKey(String username) => 'biometric_pin_${_normalizeUsername(username)}';
-  static String _getSetupLaterKey(String username) => 'offline_setup_later_${_normalizeUsername(username)}';
+  static String _getPinSaltKey(String username) =>
+      'offline_pin_salt_${_normalizeUsername(username)}';
+  static String _getPinHashKey(String username) =>
+      'offline_pin_hash_${_normalizeUsername(username)}';
+  static String _getBiometricPinKey(String username) =>
+      'biometric_pin_${_normalizeUsername(username)}';
+  static String _getSetupLaterKey(String username) =>
+      'offline_setup_later_${_normalizeUsername(username)}';
 
-  static AndroidOptions _getAndroidOptions() => const AndroidOptions(encryptedSharedPreferences: true);
-  static IOSOptions _getIOSOptions() => const IOSOptions(accessibility: KeychainAccessibility.unlocked_this_device);
+  static AndroidOptions _getAndroidOptions() =>
+      const AndroidOptions(encryptedSharedPreferences: true);
+  static IOSOptions _getIOSOptions() => const IOSOptions(
+    accessibility: KeychainAccessibility.unlocked_this_device,
+  );
 
   static Future<String> _getDeviceId() async {
     try {
       if (Platform.isAndroid) return (await _deviceInfoPlugin.androidInfo).id;
-      if (Platform.isIOS) return (await _deviceInfoPlugin.iosInfo).identifierForVendor ?? 'ios_id_not_found';
+      if (Platform.isIOS)
+        return (await _deviceInfoPlugin.iosInfo).identifierForVendor ??
+            'ios_id_not_found';
     } catch (e) {
-      if (kDebugMode) print('Lỗi không lấy được Device ID: $e');
+      if (kDebugMode) debugPrint('Lỗi không lấy được Device ID: $e');
     }
     return 'unknown_device_id';
   }
 
   // ========== CÁC HÀM LOGIC CÔNG KHAI (PUBLIC, STATIC) ==========
-
 
   // static Future<bool> authenticateWithPin({
   //   required String username,
@@ -112,16 +122,21 @@ class OfflineAuthService {
     try {
       // 1. Đọc dữ liệu Hash và Salt từ bộ nhớ an toàn
       final storedHash = await _storage.read(
-          key: _getPinHashKey(username),
-          aOptions: _getAndroidOptions(),
-          iOptions: _getIOSOptions());
+        key: _getPinHashKey(username),
+        aOptions: _getAndroidOptions(),
+        iOptions: _getIOSOptions(),
+      );
       final storedSaltBase64 = await _storage.read(
-          key: _getPinSaltKey(username),
-          aOptions: _getAndroidOptions(),
-          iOptions: _getIOSOptions());
+        key: _getPinSaltKey(username),
+        aOptions: _getAndroidOptions(),
+        iOptions: _getIOSOptions(),
+      );
 
       if (storedHash == null || storedSaltBase64 == null) {
-        _showErrorSnackBar(context, "Chưa thiết lập đăng nhập offline cho tài khoản này.");
+        _showErrorSnackBar(
+          context,
+          "Chưa thiết lập đăng nhập offline cho tài khoản này.",
+        );
         onFail?.call();
         return;
       }
@@ -155,13 +170,14 @@ class OfflineAuthService {
       onFail?.call();
     }
   }
+
   static Future<void> authenWithBiometric({
     required BuildContext context,
     required String? username,
     required VoidCallback onSuccess,
-     VoidCallback? onFail,
-     VoidCallback? onNotEnrolled,
-     VoidCallback? onKeysInvalidated, // Callback khi phát hiện thêm vân tay mới
+    VoidCallback? onFail,
+    VoidCallback? onNotEnrolled,
+    VoidCallback? onKeysInvalidated, // Callback khi phát hiện thêm vân tay mới
   }) async {
     if (username == null || username.isEmpty) {
       _showErrorSnackBar(context, 'Vui lòng nhập tên tài khoản.');
@@ -171,7 +187,10 @@ class OfflineAuthService {
     try {
       final isDeviceSupported = await _localAuth.isDeviceSupported();
       if (!isDeviceSupported) {
-        _showErrorSnackBar(context, 'Thiết bị này không hỗ trợ xác thực sinh trắc học.');
+        _showErrorSnackBar(
+          context,
+          'Thiết bị này không hỗ trợ xác thực sinh trắc học.',
+        );
         onFail?.call();
         return;
       }
@@ -184,7 +203,10 @@ class OfflineAuthService {
 
       final bool didAuthenticate = await _localAuth.authenticate(
         localizedReason: 'Vui lòng xác thực để đăng nhập nhanh',
-        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true),
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
       );
 
       if (didAuthenticate) {
@@ -195,7 +217,10 @@ class OfflineAuthService {
           // Đây chính là lúc hệ điều hành kiểm tra xem khóa mã hóa có còn hợp lệ không.
           final pin = await getPinFromSecureStorage(username: username);
           if (pin == null) {
-            _showErrorSnackBar(context, "Dữ liệu sinh trắc học không hợp lệ. Vui lòng đăng nhập bằng mã PIN hoặc ONLINE.");
+            _showErrorSnackBar(
+              context,
+              "Dữ liệu sinh trắc học không hợp lệ. Vui lòng đăng nhập bằng mã PIN hoặc ONLINE.",
+            );
             onFail?.call();
             return;
           }
@@ -216,12 +241,14 @@ class OfflineAuthService {
             onFail: onFail,
             onStorageInvalidated: onKeysInvalidated,
           );
-         } on PlatformException catch (e) {
+        } on PlatformException catch (e) {
           // <<< BƯỚC 2: BẮT LỖI KHI KHÓA BỊ THAY ĐỔI >>>
           // Nếu một vân tay/khuôn mặt mới được thêm vào, khóa mã hóa sẽ bị vô hiệu hóa.
           // Lệnh `_storage.read()` ở trên sẽ thất bại và ném ra một PlatformException.
           // Chúng ta bắt lỗi này tại đây.
-          if (e.code == 'flutter_secure_storage_plugin_error' || (Platform.isAndroid && e.message?.contains('KeyStore exception') == true)) {
+          if (e.code == 'flutter_secure_storage_plugin_error' ||
+              (Platform.isAndroid &&
+                  e.message?.contains('KeyStore exception') == true)) {
             // <<< BƯỚC 3: HÀNH ĐỘNG BẢO MẬT >>>
             // Gọi callback để yêu cầu màn hình Login bắt người dùng nhập lại PIN.
             onKeysInvalidated?.call();
@@ -250,20 +277,29 @@ class OfflineAuthService {
     }
   }
 
-  static Future<bool> registerGeneratedPinAuto({required String username}) async {
+  static Future<bool> registerGeneratedPinAuto({
+    required String username,
+  }) async {
     final bool isAlreadySetup = await isOfflineAuthSetup(username);
     if (isAlreadySetup) {
-      if (kDebugMode) print('Mã PIN cho người dùng $username đã tồn tại.');
+      if (kDebugMode) debugPrint('Mã PIN cho người dùng $username đã tồn tại.');
       return true;
     }
 
     final String generatedPin = _generatePin();
-    final bool success = await _registerPin(username: username, pin: generatedPin);
+    final bool success = await _registerPin(
+      username: username,
+      pin: generatedPin,
+    );
 
-    if (success && kDebugMode) print('Đã tạo và đăng ký PIN mới cho $username thành công.');
+    if (success && kDebugMode)
+      debugPrint('Đã tạo và đăng ký PIN mới cho $username thành công.');
     return success;
   }
-  static Future<String?> getPinFromSecureStorage({required String username}) async {
+
+  static Future<String?> getPinFromSecureStorage({
+    required String username,
+  }) async {
     try {
       // Logic đọc này sẽ tự động thất bại nếu vân tay/khuôn mặt đã bị thay đổi
       // từ lúc lưu, và sẽ ném ra PlatformException.
@@ -275,18 +311,23 @@ class OfflineAuthService {
       return pin;
     } on PlatformException catch (e) {
       // Bắt lỗi khi khóa mã hóa bị vô hiệu hóa (vân tay mới được thêm)
-      if (e.code == 'flutter_secure_storage_plugin_error' || (Platform.isAndroid && e.message?.contains('KeyStore exception') == true)) {
+      if (e.code == 'flutter_secure_storage_plugin_error' ||
+          (Platform.isAndroid &&
+              e.message?.contains('KeyStore exception') == true)) {
         if (kDebugMode) {
-          print('Lỗi bảo mật: Khóa mã hóa đã bị vô hiệu hóa. Có thể do vân tay đã thay đổi.');
+          debugPrint(
+            'Lỗi bảo mật: Khóa mã hóa đã bị vô hiệu hóa. Có thể do vân tay đã thay đổi.',
+          );
         }
       } else {
         if (kDebugMode) {
-          print('Lỗi khi đọc PIN từ Secure Storage: ${e.message}');
+          debugPrint('Lỗi khi đọc PIN từ Secure Storage: ${e.message}');
         }
       }
       return null; // Trả về null khi có bất kỳ lỗi nào
     }
   }
+
   /// Kiểm tra xem thiết bị có hỗ trợ
   /// và người dùng đã đăng ký ít nhất một phương thức sinh trắc học (vân tay/khuôn mặt) hay chưa.
   static Future<bool> canUseBiometrics() async {
@@ -300,25 +341,33 @@ class OfflineAuthService {
       // Tiếp theo, kiểm tra xem người dùng đã đăng ký ít nhất một dấu vân tay/khuôn mặt chưa.
       final bool canCheckBiometrics = await _localAuth.canCheckBiometrics;
       return canCheckBiometrics;
-
     } on PlatformException catch (e) {
       if (kDebugMode) {
-        print('Lỗi khi kiểm tra sinh trắc học: ${e.message}');
+        debugPrint('Lỗi khi kiểm tra sinh trắc học: ${e.message}');
       }
       return false;
     }
   }
 
-
   static Future<void> clearOfflineAuthData({required String username}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_getSetupLaterKey(username));
-    await _storage.delete(key: _getBiometricPinKey(username), aOptions: _getAndroidOptions(), iOptions: _getIOSOptions());
-    await _storage.delete(key: _getPinHashKey(username), aOptions: _getAndroidOptions(), iOptions: _getIOSOptions());
-    await _storage.delete(key: _getPinSaltKey(username), aOptions: _getAndroidOptions(), iOptions: _getIOSOptions());
+    await _storage.delete(
+      key: _getBiometricPinKey(username),
+      aOptions: _getAndroidOptions(),
+      iOptions: _getIOSOptions(),
+    );
+    await _storage.delete(
+      key: _getPinHashKey(username),
+      aOptions: _getAndroidOptions(),
+      iOptions: _getIOSOptions(),
+    );
+    await _storage.delete(
+      key: _getPinSaltKey(username),
+      aOptions: _getAndroidOptions(),
+      iOptions: _getIOSOptions(),
+    );
   }
-
-
 
   // static Future<bool> isOfflineAuthSetup(String username) async {
   //   final storedHash = await _storage.read(key: _getPinHashKey(username));
@@ -348,7 +397,8 @@ class OfflineAuthService {
     final isAlreadySetup = await isOfflineAuthSetup(username);
 
     // Điều kiện để bỏ qua: không "ép buộc" VÀ (người dùng đã cài đặt HOẶC đã chọn "để sau")
-    if (!forceShow && (isAlreadySetup || prefs.getBool(setupLaterKey) == true)) {
+    if (!forceShow &&
+        (isAlreadySetup || prefs.getBool(setupLaterKey) == true)) {
       return;
     }
 
@@ -366,8 +416,14 @@ class OfflineAuthService {
           title: const Text("Thiết lập mã PIN đăng nhập offline"),
           content: const Text("Mã số PIN này dùng để đăng nhập khi offline"),
           actions: [
-            TextButton(child: const Text('Để sau'), onPressed: () => Navigator.of(ctx).pop('later')),
-            ElevatedButton(child: const Text('Đồng ý'), onPressed: () => Navigator.of(ctx).pop('agree')),
+            TextButton(
+              child: const Text('Để sau'),
+              onPressed: () => Navigator.of(ctx).pop('later'),
+            ),
+            ElevatedButton(
+              child: const Text('Đồng ý'),
+              onPressed: () => Navigator.of(ctx).pop('agree'),
+            ),
           ],
         ),
       );
@@ -383,7 +439,10 @@ class OfflineAuthService {
     if (shouldProceedToSetup) {
       // Đảm bảo context vẫn còn tồn tại trước khi hiển thị dialog mới
       if (!context.mounted) return;
-      final success = await _showPinSetupDialog(context: context, username: username);
+      final success = await _showPinSetupDialog(
+        context: context,
+        username: username,
+      );
 
       if (success == true) {
         // Nếu cài đặt thành công, xóa cờ "để sau" để không bỏ qua ở lần đăng nhập tới.
@@ -498,7 +557,8 @@ class OfflineAuthService {
   static Widget buildBiometricLoginButton({
     required BuildContext context,
     required String username,
-    required bool isLoading, // Đây là loading từ màn hình Login (ví dụ đang gọi API)
+    required bool
+    isLoading, // Đây là loading từ màn hình Login (ví dụ đang gọi API)
     required VoidCallback onSuccess,
   }) {
     if (username.isEmpty) return const SizedBox.shrink();
@@ -519,7 +579,11 @@ class OfflineAuthService {
       },
     );
   }
-  static Future<bool> _registerPin({required String username, required String pin}) async {
+
+  static Future<bool> _registerPin({
+    required String username,
+    required String pin,
+  }) async {
     try {
       final salt = _generateSalt();
       final deviceId = await _getDeviceId();
@@ -528,12 +592,27 @@ class OfflineAuthService {
       final hashedPin = await _hashWithAlgorithm(rawString, salt);
       final saltBase64 = base64.encode(salt);
 
-      await _storage.write(key: _getPinHashKey(username), value: hashedPin, aOptions: _getAndroidOptions(), iOptions: _getIOSOptions());
-      await _storage.write(key: _getPinSaltKey(username), value: saltBase64, aOptions: _getAndroidOptions(), iOptions: _getIOSOptions());
-      await _storage.write(key: _getBiometricPinKey(username), value: pin, aOptions: _getAndroidOptions(), iOptions: _getIOSOptions());
+      await _storage.write(
+        key: _getPinHashKey(username),
+        value: hashedPin,
+        aOptions: _getAndroidOptions(),
+        iOptions: _getIOSOptions(),
+      );
+      await _storage.write(
+        key: _getPinSaltKey(username),
+        value: saltBase64,
+        aOptions: _getAndroidOptions(),
+        iOptions: _getIOSOptions(),
+      );
+      await _storage.write(
+        key: _getBiometricPinKey(username),
+        value: pin,
+        aOptions: _getAndroidOptions(),
+        iOptions: _getIOSOptions(),
+      );
       return true;
     } catch (e) {
-      if (kDebugMode) print('Lỗi khi đăng ký PIN với PBKDF2: $e');
+      if (kDebugMode) debugPrint('Lỗi khi đăng ký PIN với PBKDF2: $e');
       return false;
     }
   }
@@ -570,16 +649,33 @@ class OfflineAuthService {
     }
     return pin;
   }
+
   // --- PRIVATE UI HELPERS (static) ---
   static void _showSuccessSnackBar(BuildContext context, String message) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)..removeCurrentSnackBar()..showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     }
   }
 
   static void _showErrorSnackBar(BuildContext context, String message) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)..removeCurrentSnackBar()..showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     }
   }
 
@@ -601,9 +697,13 @@ class OfflineAuthService {
   /// [salt]: Chuỗi salt đã tạo cho người dùng này.
   ///
 
-  static Future<String> _hashWithAlgorithm(String rawInput, List<int> salt) async {
+  static Future<String> _hashWithAlgorithm(
+    String rawInput,
+    List<int> salt,
+  ) async {
     return _hashWithPbkdf2(rawInput, salt);
   }
+
   /// =================================================================
   /// HÀM BĂM MỚI SỬ DỤNG PBKDF2 (TỪ THƯ VIỆN 'cryptography')
   /// =================================================================
@@ -615,32 +715,33 @@ class OfflineAuthService {
       bits: 256,
     );
     final secretKey = SecretKey(utf8.encode(rawInput));
-    final newKey = await pbkdf2.deriveKey(
-      secretKey: secretKey,
-      nonce: salt,
-    );
+    final newKey = await pbkdf2.deriveKey(secretKey: secretKey, nonce: salt);
     final newKeyBytes = await newKey.extractBytes();
     return hex.encode(newKeyBytes);
   }
-  static Future<String> _hashWithArgon2id(String rawInput, List<int> salt) async {
-    final argon2id = Argon2id(
-      parallelism: 4,          // Số luồng (tăng nếu device mạnh)
-      memory: 64 * 1024,       // 64 MiB (OWASP khuyến nghị cao hơn minimum 19 MiB)
-      iterations: 3,           // Thời gian (tăng để chậm hơn nếu cần)
-      hashLength: 32,          // 256 bits
-    );
 
-    final rawInputBytes = utf8.encode(rawInput);
-    final saltUint8 = Uint8List.fromList(salt);
-
-    final secretKey = await argon2id.deriveKey(
-      secretKey: SecretKey(rawInputBytes),
-      nonce: saltUint8,
-    );
-
-    final derivedBytes = await secretKey.extractBytes();
-    return hex.encode(derivedBytes);  // Giữ hex để tương thích lưu trữ
-  }
+  // static Future<String> _hashWithArgon2id(
+  //   String rawInput,
+  //   List<int> salt,
+  // ) async {
+  //   final argon2id = Argon2id(
+  //     parallelism: 4, // Số luồng (tăng nếu device mạnh)
+  //     memory: 64 * 1024, // 64 MiB (OWASP khuyến nghị cao hơn minimum 19 MiB)
+  //     iterations: 3, // Thời gian (tăng để chậm hơn nếu cần)
+  //     hashLength: 32, // 256 bits
+  //   );
+  //
+  //   final rawInputBytes = utf8.encode(rawInput);
+  //   final saltUint8 = Uint8List.fromList(salt);
+  //
+  //   final secretKey = await argon2id.deriveKey(
+  //     secretKey: SecretKey(rawInputBytes),
+  //     nonce: saltUint8,
+  //   );
+  //
+  //   final derivedBytes = await secretKey.extractBytes();
+  //   return hex.encode(derivedBytes); // Giữ hex để tương thích lưu trữ
+  // }
 
   /// Hàm so sánh hai chuỗi một cách an toàn để chống timing attack.
   static bool _areHashesEqual(String a, String b) {
@@ -653,24 +754,28 @@ class OfflineAuthService {
     }
     return result == 0;
   }
-
 }
 
 // ... Dialog Nhập PIN giữ nguyên không đổi ...
 // (Phần dialog bên dưới không cần thay đổi gì)
-Future<bool?> _showPinSetupDialog({required BuildContext context, required String username}) {
+Future<bool?> _showPinSetupDialog({
+  required BuildContext context,
+  required String username,
+}) {
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => _PinSetupDialogContent(username: username),
   );
 }
+
 class _PinSetupDialogContent extends StatefulWidget {
   final String username;
   const _PinSetupDialogContent({required this.username});
   @override
   State<_PinSetupDialogContent> createState() => _PinSetupDialogContentState();
 }
+
 class _PinSetupDialogContentState extends State<_PinSetupDialogContent> {
   final _formKey = GlobalKey<FormState>();
   final _pinController = TextEditingController();
@@ -688,6 +793,7 @@ class _PinSetupDialogContentState extends State<_PinSetupDialogContent> {
     if (!mounted) return;
     Navigator.of(context).pop(success);
   }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -698,15 +804,23 @@ class _PinSetupDialogContentState extends State<_PinSetupDialogContent> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Vui lòng tạo mã PIN gồm $kDefaultPinLength chữ số để đăng nhập Offline.'),
+              Text(
+                'Vui lòng tạo mã PIN gồm $kDefaultPinLength chữ số để đăng nhập Offline.',
+              ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _pinController,
                 keyboardType: TextInputType.number,
                 maxLength: kDefaultPinLength,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Mã PIN', border: OutlineInputBorder(), counterText: ""),
-                validator: (v) => (v?.length ?? 0) != kDefaultPinLength ? 'PIN phải có $kDefaultPinLength chữ số' : null,
+                decoration: const InputDecoration(
+                  labelText: 'Mã PIN',
+                  border: OutlineInputBorder(),
+                  counterText: "",
+                ),
+                validator: (v) => (v?.length ?? 0) != kDefaultPinLength
+                    ? 'PIN phải có $kDefaultPinLength chữ số'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -714,22 +828,38 @@ class _PinSetupDialogContentState extends State<_PinSetupDialogContent> {
                 keyboardType: TextInputType.number,
                 maxLength: kDefaultPinLength,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Xác nhận PIN', border: OutlineInputBorder(), counterText: ""),
-                validator: (v) => v != _pinController.text ? 'PIN xác nhận không khớp' : null,
+                decoration: const InputDecoration(
+                  labelText: 'Xác nhận PIN',
+                  border: OutlineInputBorder(),
+                  counterText: "",
+                ),
+                validator: (v) =>
+                    v != _pinController.text ? 'PIN xác nhận không khớp' : null,
               ),
             ],
           ),
         ),
       ),
       actions: _isLoading
-          ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
+          ? [
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            ]
           : [
-        TextButton(child: const Text('Hủy'), onPressed: () => Navigator.of(context).pop(null)),
-        ElevatedButton(onPressed: _onSavePin, child: const Text('Lưu')),
-      ],
+              TextButton(
+                child: const Text('Hủy'),
+                onPressed: () => Navigator.of(context).pop(null),
+              ),
+              ElevatedButton(onPressed: _onSavePin, child: const Text('Lưu')),
+            ],
     );
   }
 }
+
 class _InternalBiometricButton extends StatefulWidget {
   final String username;
   final bool externalLoading;
@@ -742,7 +872,8 @@ class _InternalBiometricButton extends StatefulWidget {
   });
 
   @override
-  State<_InternalBiometricButton> createState() => _InternalBiometricButtonState();
+  State<_InternalBiometricButton> createState() =>
+      _InternalBiometricButtonState();
 }
 
 class _InternalBiometricButtonState extends State<_InternalBiometricButton> {
@@ -783,7 +914,11 @@ class _InternalBiometricButtonState extends State<_InternalBiometricButton> {
           Opacity(
             opacity: isDisabled ? 0.5 : 1.0, // Làm mờ nút khi bị disable
             child: IconButton(
-              icon: const Icon(Icons.fingerprint, size: 55, color: Color(0xFF0c6fff)),
+              icon: const Icon(
+                Icons.fingerprint,
+                size: 55,
+                color: Color(0xFF0c6fff),
+              ),
               onPressed: isDisabled ? null : _handleTap,
             ),
           ),

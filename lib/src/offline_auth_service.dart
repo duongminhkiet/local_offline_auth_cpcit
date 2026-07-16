@@ -48,6 +48,16 @@ class OfflineAuthService {
     accessibility: KeychainAccessibility.unlocked_this_device,
   );
 
+  /// Nhận diện lỗi Keystore/khoá mã hoá bị hỏng (ví dụ sau khi gỡ & cài lại app).
+  /// Kiểm tra gộp cả code/message/details vì flutter_secure_storage thường trả
+  /// nội dung lỗi thật (BadPaddingException/BAD_DECRYPT) trong `details`, không phải `message`.
+  static bool _isKeystoreCorrupted(PlatformException e) {
+    final fullError = '${e.code}|${e.message}|${e.details}';
+    return fullError.contains('BadPaddingException') ||
+        fullError.contains('BAD_DECRYPT') ||
+        fullError.contains('KeyStore exception');
+  }
+
   static Future<String> _getDeviceId() async {
     try {
       if (Platform.isAndroid) return (await _deviceInfoPlugin.androidInfo).id;
@@ -157,8 +167,7 @@ class OfflineAuthService {
       }
     } on PlatformException catch (e) {
       // Bắt lỗi khi khóa bảo mật bị hỏng (do nâng cấp OS hoặc thay đổi cấu hình hệ thống)
-      if (e.message?.contains('javax.crypto.BadPaddingException') == true ||
-          e.message?.contains('BAD_DECRYPT') == true) {
+      if (_isKeystoreCorrupted(e)) {
         await clearOfflineAuthData(username: username);
         onStorageInvalidated?.call();
       } else {
@@ -247,10 +256,10 @@ class OfflineAuthService {
           // Lệnh `_storage.read()` ở trên sẽ thất bại và ném ra một PlatformException.
           // Chúng ta bắt lỗi này tại đây.
           if (e.code == 'flutter_secure_storage_plugin_error' ||
-              (Platform.isAndroid &&
-                  e.message?.contains('KeyStore exception') == true)) {
+              _isKeystoreCorrupted(e)) {
             // <<< BƯỚC 3: HÀNH ĐỘNG BẢO MẬT >>>
             // Gọi callback để yêu cầu màn hình Login bắt người dùng nhập lại PIN.
+            await clearOfflineAuthData(username: username);
             onKeysInvalidated?.call();
             onFail?.call();
           } else {
@@ -310,15 +319,16 @@ class OfflineAuthService {
       );
       return pin;
     } on PlatformException catch (e) {
-      // Bắt lỗi khi khóa mã hóa bị vô hiệu hóa (vân tay mới được thêm)
+      // Bắt lỗi khi khóa mã hóa bị vô hiệu hóa (vân tay mới được thêm hoặc key Keystore hỏng)
       if (e.code == 'flutter_secure_storage_plugin_error' ||
-          (Platform.isAndroid &&
-              e.message?.contains('KeyStore exception') == true)) {
+          _isKeystoreCorrupted(e)) {
         if (kDebugMode) {
           debugPrint(
-            'Lỗi bảo mật: Khóa mã hóa đã bị vô hiệu hóa. Có thể do vân tay đã thay đổi.',
+            'Lỗi bảo mật: Khóa mã hóa đã bị vô hiệu hóa. Đang xóa dữ liệu offline auth cũ.',
           );
         }
+        // Dọn luôn dữ liệu hỏng để tránh lặp lại lỗi này ở các lần đăng nhập sau.
+        await clearOfflineAuthData(username: username);
       } else {
         if (kDebugMode) {
           debugPrint('Lỗi khi đọc PIN từ Secure Storage: ${e.message}');
@@ -375,13 +385,22 @@ class OfflineAuthService {
   // }
   static Future<bool> isOfflineAuthSetup(String username) async {
     if (username.isEmpty) return false;
-    // BỔ SUNG: Truyền options vào để đảm bảo đọc đúng vùng nhớ bảo mật
-    final storedHash = await _storage.read(
-      key: _getPinHashKey(username),
-      aOptions: _getAndroidOptions(),
-      iOptions: _getIOSOptions(),
-    );
-    return storedHash != null;
+    try {
+      // BỔ SUNG: Truyền options vào để đảm bảo đọc đúng vùng nhớ bảo mật
+      final storedHash = await _storage.read(
+        key: _getPinHashKey(username),
+        aOptions: _getAndroidOptions(),
+        iOptions: _getIOSOptions(),
+      );
+      return storedHash != null;
+    } on PlatformException catch (e) {
+      // Hàm này chạy tự động khi màn hình login/settings hiện lên, nên không được
+      // để lỗi Keystore hỏng ném ra ngoài không được xử lý (gây "Lỗi không xác định").
+      if (_isKeystoreCorrupted(e)) {
+        await clearOfflineAuthData(username: username);
+      }
+      return false;
+    }
   }
 
   // ========== CÁC HÀM TƯƠNG TÁC VỚI UI (PUBLIC, STATIC) ==========
